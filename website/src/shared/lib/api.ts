@@ -8,6 +8,10 @@ export interface SecretBody {
   one_time: boolean;
 }
 
+export interface WebhookSecretBody extends SecretBody {
+  delivery_manager: string;
+}
+
 type ApiResponse = {
   data: { message: string };
   status: number;
@@ -31,4 +35,8 @@ export async function postSecret(body: SecretBody): Promise<ApiResponse> {
 
 export async function uploadFile(body: SecretBody): Promise<ApiResponse> {
   return post(backendDomain + '/file', body);
+}
+
+export async function postWebhookSecret(body: WebhookSecretBody): Promise<ApiResponse> {
+  return post(backendDomain + '/secret/webhook', body);
 }

@@ -9,6 +9,7 @@ export interface Config {
   PREFETCH_SECRET: boolean;
   NO_LANGUAGE_SWITCHER: boolean;
   FORCE_ONETIME_SECRETS: boolean;
+  WEBHOOK_MODE_ENABLED: boolean;
   PRIVACY_NOTICE_URL?: string;
   IMPRINT_URL?: string;
 }
@@ -19,6 +20,7 @@ const defaultConfig: Config = {
   PREFETCH_SECRET: true,
   NO_LANGUAGE_SWITCHER: false,
   FORCE_ONETIME_SECRETS: false,
+  WEBHOOK_MODE_ENABLED: false,
 };
 
 type GlobalWithCache = typeof globalThis & {
@@ -52,6 +54,7 @@ async function loadConfig(): Promise<Config> {
         PREFETCH_SECRET: data.PREFETCH_SECRET,
         NO_LANGUAGE_SWITCHER: data.NO_LANGUAGE_SWITCHER,
         FORCE_ONETIME_SECRETS: data.FORCE_ONETIME_SECRETS,
+        WEBHOOK_MODE_ENABLED: data.WEBHOOK_MODE_ENABLED,
         PRIVACY_NOTICE_URL: data.PRIVACY_NOTICE_URL,
         IMPRINT_URL: data.IMPRINT_URL,
       };

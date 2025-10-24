@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,6 +28,112 @@ type Server struct {
 	AssetPath           string
 	Logger              *zap.Logger
 	TrustedProxies      []string
+	WebhookURL          string
+	WebhookModeEnabled  bool
+}
+
+// WebhookSecret represents a secret with delivery manager info
+type WebhookSecret struct {
+	Expiration      int32  `json:"expiration,omitempty"`
+	Message         string `json:"message"`
+	OneTime         bool   `json:"one_time,omitempty"`
+	DeliveryManager string `json:"delivery_manager"`
+}
+
+// createWebhookSecret creates secret and sends webhook
+func (y *Server) createWebhookSecret(w http.ResponseWriter, request *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", viper.GetString("cors-allow-origin"))
+
+	if !y.WebhookModeEnabled {
+		http.Error(w, `{"message": "Webhook mode not enabled"}`, http.StatusForbidden)
+		return
+	}
+
+	decoder := json.NewDecoder(request.Body)
+	var s WebhookSecret
+	if err := decoder.Decode(&s); err != nil {
+		y.Logger.Debug("Unable to decode webhook request", zap.Error(err))
+		http.Error(w, `{"message": "Unable to parse json"}`, http.StatusBadRequest)
+		return
+	}
+
+	if s.DeliveryManager == "" {
+		http.Error(w, `{"message": "Delivery manager is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if !isPGPEncrypted(s.Message) {
+		http.Error(w, `{"message": "Message must be PGP encrypted"}`, http.StatusBadRequest)
+		return
+	}
+
+	if !validExpiration(s.Expiration) {
+		http.Error(w, `{"message": "Invalid expiration specified"}`, http.StatusBadRequest)
+		return
+	}
+
+	if len(s.Message) > y.MaxLength {
+		http.Error(w, `{"message": "The encrypted message is too long"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Generate new UUID
+	uuidVal, err := uuid.NewV4()
+	if err != nil {
+		y.Logger.Error("Unable to generate UUID", zap.Error(err))
+		http.Error(w, `{"message": "Unable to generate UUID"}`, http.StatusInternalServerError)
+		return
+	}
+	key := uuidVal.String()
+
+	// Convert to regular secret for storage
+	secret := yopass.Secret{
+		Expiration: s.Expiration,
+		Message:    s.Message,
+		OneTime:    true, // Always one-time for webhook mode
+	}
+
+	// Store secret in database
+	if err := y.DB.Put(key, secret); err != nil {
+		y.Logger.Error("Unable to store secret", zap.Error(err))
+		http.Error(w, `{"message": "Failed to store secret in database"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Get client IP
+	clientIP := y.getClientIP(request)
+
+	// Create one-time link
+	oneTimeLink := fmt.Sprintf("%s/#/s/%s", strings.TrimSuffix(viper.GetString("cors-allow-origin"), "/"), key)
+
+	// Send webhook
+	webhookPayload := WebhookPayload{
+		OneTimeLink:       oneTimeLink,
+		DeliveryManager:   s.DeliveryManager,
+		Timestamp:         time.Now().Format(time.RFC3339),
+		ExpirationSeconds: s.Expiration,
+		ClientIP:          clientIP,
+		SecretID:          key,
+	}
+
+	if err := y.SendWebhook(webhookPayload); err != nil {
+		y.Logger.Error("Failed to send webhook", zap.Error(err))
+		// Delete the secret since webhook failed
+		y.DB.Delete(key)
+		http.Error(w, `{"message": "Failed to deliver credentials to delivery manager"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Return success without exposing the secret UUID
+	resp := map[string]string{"message": "Credentials submitted successfully"}
+	jsonData, err := json.Marshal(resp)
+	if err != nil {
+		y.Logger.Error("Failed to marshal webhook response", zap.Error(err))
+	}
+
+	if _, err = w.Write(jsonData); err != nil {
+		y.Logger.Error("Failed to write webhook response", zap.Error(err))
+	}
 }
 
 // createSecret creates secret
@@ -169,6 +276,7 @@ func (y *Server) configHandler(w http.ResponseWriter, r *http.Request) {
 		"DISABLE_FEATURES":      viper.GetBool("disable-features"),
 		"NO_LANGUAGE_SWITCHER":  viper.GetBool("no-language-switcher"),
 		"FORCE_ONETIME_SECRETS": viper.GetBool("force-onetime-secrets"),
+		"WEBHOOK_MODE_ENABLED":  y.WebhookModeEnabled,
 	}
 
 	// Add optional string URLs only if they are provided
@@ -182,6 +290,27 @@ func (y *Server) configHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(config)
 }
 
+// getClientIP extracts the real client IP from the request
+func (y *Server) getClientIP(request *http.Request) string {
+	// Check X-Forwarded-For header if trusted proxies are configured
+	if len(y.TrustedProxies) > 0 {
+		if forwardedFor := request.Header.Get("X-Forwarded-For"); forwardedFor != "" {
+			// X-Forwarded-For can contain multiple IPs, take the first one
+			ips := strings.Split(forwardedFor, ",")
+			if len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+	}
+	
+	// Fall back to RemoteAddr
+	ip := request.RemoteAddr
+	if colon := strings.LastIndex(ip, ":"); colon != -1 {
+		ip = ip[:colon]
+	}
+	return ip
+}
+
 // HTTPHandler containing all routes
 func (y *Server) HTTPHandler() http.Handler {
 	mx := mux.NewRouter()
@@ -189,6 +318,8 @@ func (y *Server) HTTPHandler() http.Handler {
 
 	mx.HandleFunc("/secret", y.createSecret).Methods(http.MethodPost)
 	mx.HandleFunc("/secret", y.optionsSecret).Methods(http.MethodOptions)
+	mx.HandleFunc("/secret/webhook", y.createWebhookSecret).Methods(http.MethodPost)
+	mx.HandleFunc("/secret/webhook", y.optionsSecret).Methods(http.MethodOptions)
 	if viper.GetBool("prefetch-secret") {
 		mx.HandleFunc("/secret/"+keyParameter+"/status", y.getSecretStatus).Methods(http.MethodGet)
 	}

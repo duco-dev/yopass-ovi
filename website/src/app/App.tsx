@@ -1,5 +1,6 @@
 import FeaturesSection from '@shared/components/FeaturesSection';
 import CreateSecret from '@features/CreateSecret';
+import ClientCredentials from '@features/ClientCredentials';
 import { Routes, Route, HashRouter } from 'react-router-dom';
 import { useConfig } from '@shared/hooks/useConfig';
 import Navbar from '@shared/components/Navbar';
@@ -8,7 +9,7 @@ import Upload from '@features/Upload';
 import { useTranslation } from 'react-i18next';
 
 export default function App() {
-  const { DISABLE_UPLOAD, PRIVACY_NOTICE_URL, IMPRINT_URL } = useConfig();
+  const { DISABLE_UPLOAD, PRIVACY_NOTICE_URL, IMPRINT_URL, WEBHOOK_MODE_ENABLED } = useConfig();
   const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-base-200">
@@ -23,6 +24,9 @@ export default function App() {
                 <Route path="/" element={<CreateSecret />} />
                 {!DISABLE_UPLOAD && (
                   <Route path="/upload" element={<Upload />} />
+                )}
+                {WEBHOOK_MODE_ENABLED && (
+                  <Route path="/client-credentials" element={<ClientCredentials />} />
                 )}
                 <Route
                   path="/:format/:key/:password"

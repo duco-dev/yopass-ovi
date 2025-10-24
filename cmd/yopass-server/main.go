@@ -46,6 +46,8 @@ func init() {
 	pflag.StringSlice("trusted-proxies", []string{}, "trusted proxy IP addresses or CIDR blocks for X-Forwarded-For header validation")
 	pflag.String("privacy-notice-url", "", "URL to privacy notice page")
 	pflag.String("imprint-url", "", "URL to imprint/legal notice page")
+	pflag.String("webhook-url", "", "Webhook URL for client credentials delivery")
+	pflag.Bool("enable-webhook-mode", false, "Enable client credentials webhook mode")
 	pflag.CommandLine.AddGoFlag(&flag.Flag{Name: "log-level", Usage: "Log level", Value: &logLevel})
 
 	viper.AutomaticEnv()
@@ -75,6 +77,8 @@ func main() {
 		AssetPath:           viper.GetString("asset-path"),
 		Logger:              logger,
 		TrustedProxies:      viper.GetStringSlice("trusted-proxies"),
+		WebhookURL:          viper.GetString("webhook-url"),
+		WebhookModeEnabled:  viper.GetBool("enable-webhook-mode"),
 	}
 	yopassSrv := &http.Server{
 		Addr:      fmt.Sprintf("%s:%d", viper.GetString("address"), viper.GetInt("port")),

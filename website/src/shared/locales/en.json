@@ -120,5 +120,23 @@
     "privacyNotice": "Privacy Notice",
     "imprint": "Imprint",
     "createdBy": "Created by"
+  },
+  "clientCredentials": {
+    "title": "Submit Client Credentials",
+    "subtitle": "Securely submit your credentials to the delivery manager. Your information will be encrypted and delivered directly to the assigned team member.",
+    "inputSecretLabel": "Your Credentials",
+    "inputSecretPlaceholder": "Enter your username, password, and any other relevant credentials...",
+    "deliveryManagerLabel": "Delivery Manager",
+    "deliveryManagerPlaceholder": "Select a delivery manager",
+    "buttonSubmit": "Submit Credentials",
+    "instructions": "Your credentials will be encrypted and sent securely to the selected delivery manager. They will receive a one-time access link to retrieve your information.",
+    "expirationLegend": "Credentials will be automatically deleted after"
+  },
+  "clientCredentialsResult": {
+    "title": "Credentials Submitted Successfully",
+    "subtitle": "Your credentials have been encrypted and securely delivered to the selected delivery manager.",
+    "nextSteps": "The delivery manager will receive a secure notification with access to your credentials. You can close this window or submit additional credentials if needed.",
+    "buttonSubmitAnother": "Submit Another",
+    "buttonClose": "Close"
   }
 }
